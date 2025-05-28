@@ -6,23 +6,11 @@ local RedPointStruct = require("RedPointStruct")
 ---@type LuaUtils
 local LuaUtils = require("LuaUtils")
 
--- 节点名
-RedPointTree.NodeNames = {
-    Root = "Root",
 
-    ModelA = "Root|ModelA",
-    ModelA_Sub_1 = "Root|ModelA|ModelA_Sub_1",
-    ModelA_Sub_2 = "Root|ModelA|ModelA_Sub_2",
-
-    ModelB = "Root|ModelB",
-    ModelB_Sub_1 = "Root|ModelB|ModelB_Sub_1",
-    ModelB_Sub_2 = "Root|ModelB|ModelB_Sub_2",
-}
-
-function RedPointTree:ctor(redPointParams)
+function RedPointTree:ctor(params)
     self.root = nil
     self.redPointNodeMap = {}       -- key为红点id
-    self:init(redPointParams)
+    self:register(params)
 end
 
 ---Init 初始化红点树
@@ -44,7 +32,7 @@ function RedPointTree:init(redPointParams)
     for level, v in ipairs(ids) do
         -- 知道层级，才能知道结点在树中的位置
         isLeaf = #ids == level
-        self:InsertNode({
+        self:register({
             id = ids[level],
             idString = redPointParams.ids,
             isLeaf = isLeaf,
@@ -53,26 +41,6 @@ function RedPointTree:init(redPointParams)
         })
     end
 
-end
-
----InsertNode 插入红点
----@param redPointParams table  相关红点参数，具体内容待定
-function RedPointTree:insertNode(redPointParams)
-    --- 通过id遍历字典树，如果某一个节点不存在
-    local ids = LuaUtils.splitString(redPointParams.idString, "|")
-    local curNode = self.root
-    for i = 2, #ids do
-        local id = ids[i]
-        local child = curNode.children[id]
-        if not child then
-            child = RedPointStruct.new()      -- todo
-            curNode.children[id] = child
-            child.parent = curNode
-            curNode = child
-            self.redPointNodeMap[id] = child
-        end
-    end
-    return true
 end
 
 --- getRedPointNode查询节点是否在树中并返回节点 应该可以所有红点树有一个为id为0的公共根
@@ -146,40 +114,43 @@ function RedPointTree:GetRedpointCnt(name)
     return node.redpointCnt or 0
 end
 
--- 新注册的红点一定是叶子结点
-function RedPointTree:register(idString)
-    self:insertNode()
-
-
-
-end
-
--- 设置红点更新回调函数
-function RedPointTree.SetCallBack(name, key, cb)
-    local node = this.getRedPointStruct(name)
-    if nil == node then
-        return
-    end
-    node.updateCb[key] = cb
-end
-
--- 递归获取整棵树的路径
-function RedPointTree.GetFullTreePath(parent, pathList)
-    for path, node in pairs(parent.children) do
-        table.insert(pathList, path)
-        if LuaUtil.TableCount(node.children) > 0 then
-            this.GetFullTreePath(node, pathList)
+---register 递归地注册红点
+---params = { idString }
+function RedPointTree:register(params)
+    --- 从叶子向根添加红点（因为保存了映射，不用遍历了）
+    --- 也解决了其中某个红点可能没构造的问题
+    local idString = params.idString
+    local ids = LuaUtils.splitString(idString, "|")
+    local child = nil       -- 上次一构造的子红点
+    for i = #ids, 1, -1 do
+        local id = ids[i]
+        if self.redPointNodeMap[id] then
+            --- 有这个红点
+            break
         end
+        --- 当前构造的红点
+        local curNode = RedPointStruct.new({
+            id = id,
+            idString = idString,
+        })
+        curNode:addChild(child)
+        child:setParent(curNode)
+        curNode = child
+        self.redPointNodeMap[id] = child
+    end
+    if not self.root then
+        self.root = self.redPointNodeMap[ids[1]]        -- 设置根节点
+    else
+        assert(self.root:getId() == ids[1], "根节点红点id不一致，请核实")
+    end
+    self.redPointNodeMap[ids[#ids]]:setUpdateFunc(params.updateFunc)        -- 叶子结点设置方法
+end
+
+---setUpdateFunc 设置某一个红点的刷新方法
+function RedPointTree:setUpdateFunc(id, updateFunc)
+    if self.redPointNodeMap[id] then
+        self.redPointNodeMap[id]:setUpdateFunc(updateFunc)
     end
 end
-
--- 打印整棵树的路径
-function RedPointTree.PrintFullTreePath()
-    local pathList = {}
-    this.GetFullTreePath(this.root, pathList)
-    LuaUtil.PrintTable(pathList)
-end
-
-
 
 return RedPointTree

@@ -49,6 +49,8 @@ function RedPointStruct:ctor(params)
     self.showNumber = 1     -- 大于零认为可以显示
     self.redPointCnt = 0            -- 数字红点，统计子红点的红点数
     self:_initUpdateFunc(params.funcMap)
+
+    -- todo: 或许可以保存根结点，便于反向查找
 end
 
 --- _initUpdateFunc 设置红点刷新函数
@@ -66,6 +68,10 @@ function RedPointStruct:_initUpdateFunc(funcMap)
     end
 end
 
+function RedPointStruct:setUpdateFunc(funcMap)
+
+end
+
 --- 初步考虑，当数据变化时，递归setDirty，实际需要刷新的时候，才进行计算，减小性能消耗
 --- UI刷新后重置本node脏标
 function RedPointStruct:setDirty(isDirty, redPointType)
@@ -78,6 +84,9 @@ end
 ---addChild
 ---@param child RedPointStruct
 function RedPointStruct:addChild(child)
+    if not child then
+        return
+    end
     local redId = child:getId()
     self.children[redId] = {
         node = child,
@@ -98,6 +107,11 @@ function RedPointStruct:removeChild(id)
             -- todo:没有父红点，说明这是根红点，从森林中移除
         end
     end
+end
+
+---@param parent RedPointStruct
+function RedPointStruct:setParent(parent)
+    self.parent = parent
 end
 
 ---isShow todo:逻辑需要补全
