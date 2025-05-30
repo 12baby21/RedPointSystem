@@ -12,12 +12,13 @@ end)
 ---@type RedPointConst
 local RedPointConst = require("RedPointConst")
 
-function UIRedPointNode:ctor()
-    self.id = 0
-    self.idString = ""
-    self.redPointNode = nil
+function UIRedPointNode:ctor(params)
+    self.id = params.id
+    self.idString = params.idString
     self.redPointType = RedPointConst.NONE
     self.showNum = 0
+    self.redPointNode = nil
+    self.getUIFunc = nil
 end
 
 function UIRedPointNode:updateShow(showNum, redPointType)
@@ -44,6 +45,9 @@ function UIRedPointNode:updateShow(showNum, redPointType)
                 self.redPointNode = display.newSprite("redPoint/normal.png")
             elseif redPointType == RedPointConst.TYPE.NUMBER then
                 self.redPointNode = display.newSprite("redPoint/number.png")
+            else
+                --- 自定义红点走自己的逻辑
+                local path = self.getUIFunc()
             end
             if self.redPointNode then
                 self:addChild(self.redPointNode)

@@ -9,38 +9,9 @@ local LuaUtils = require("LuaUtils")
 
 function RedPointTree:ctor(params)
     self.root = nil
+    ---@type RedPointStruct[]
     self.redPointNodeMap = {}       -- key为红点id
     self:register(params)
-end
-
----Init 初始化红点树
-function RedPointTree:init(redPointParams)
-    local ids = LuaUtils.splitString(redPointParams.ids, "|")
-    -- 先创建根节点
-    -- todo: 这块逻辑应该可以优化
-    local isLeaf = #ids == 1
-    self.root = RedPointStruct.new({
-        id = ids[1],
-        idString = redPointParams.ids,      -- 检索用
-        isLeaf = isLeaf,
-        level = 1,
-        updateFunc = isLeaf and redPointParams.updateFunc or nil,
-    })
-
-    -- 构建前缀树
-    -- todo：不该代码添加，应该从配置添加
-    for level, v in ipairs(ids) do
-        -- 知道层级，才能知道结点在树中的位置
-        isLeaf = #ids == level
-        self:register({
-            id = ids[level],
-            idString = redPointParams.ids,
-            isLeaf = isLeaf,
-            level = level,
-            updateFunc = isLeaf and redPointParams.updateFunc or nil,
-        })
-    end
-
 end
 
 --- getRedPointNode查询节点是否在树中并返回节点 应该可以所有红点树有一个为id为0的公共根
@@ -64,10 +35,9 @@ function RedPointTree:getRedPointNodeById(id)
 end
 
 
----deleteRedPointStruct 删除某个红点
+---unregister 删除某个红点
 ---@param idString string
-function RedPointTree:deleteRedPointStruct(idString)
-    -- todo:理论上不应该支持删除非叶结点，如果需要支持则需要后续开发
+function RedPointTree:unregister(idString)
     local node = self:getRedPointNode(idString)
     if nil == node then    -- 没有找到该红点
         dump(idString, "删除失败，没有找到当前层级结构的红点：")
@@ -79,6 +49,19 @@ function RedPointTree:deleteRedPointStruct(idString)
     end
     node = nil
     return true
+end
+
+function RedPointTree:unregisterFromParent(id)
+    local node = self.redPointNodeMap[id]
+    if not node then
+        return
+    end
+    local parent = node.parent
+    if parent then
+        parent:removeChild(id)
+
+    end
+
 end
 
 ---register 递归地注册红点

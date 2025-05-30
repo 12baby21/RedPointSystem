@@ -101,7 +101,9 @@ end
 function RedPointStruct:removeChild(id)
     self.children[id] = nil
     self.childCnt = self.childCnt - 1
-    if self.childCnt <= 0 then
+
+    -- todo: 不一定要删除，因为只是逻辑
+    if self.childCnt == 0 then
         if self.parent then
             self.parent:removeChild(self.id)
         else

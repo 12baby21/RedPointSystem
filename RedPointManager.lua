@@ -92,7 +92,7 @@ function RedPointManager:unregister(idString)
     local redPointTree = self.redPointForest[checkint(ids[1])]
     if redPointTree then
         -- todo 直接从父结点删除
-        redPointTree:deleteRedPointStruct()
+        redPointTree:unregister()
     end
 end
 
