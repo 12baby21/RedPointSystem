@@ -6,6 +6,7 @@
 --- 每棵红点树都是一棵字典树，用id作为唯一标识
 --- 采用红点森林的目的主要是为了解决部分红点不需要穿透的问题
 --- 提供对外接口
+--- Singleton
 ---
 
 ---@class RedPointManager
@@ -95,6 +96,14 @@ function RedPointManager:unregister(idString)
     end
 end
 
+---removeTree 删除整颗树
+function RedPointManager:removeTree(rootId)
+    if self.redPointForest[rootId] then
+        self.redPointForest[rootId] = nil
+    end
+
+end
+
 ---getRedPointNode 获取某一棵红点树上的具体红点
 ---@param idString string
 ---@return RedPointStruct
@@ -128,7 +137,6 @@ function RedPointManager:bind(uiRedPoint, idString)
     end
 end
 
-
 --- 离开界面时移除红点ui
 function RedPointManager:unbind(idString)
     local redPointNode = self:getRedPointNode(idString)
@@ -140,10 +148,10 @@ end
 function RedPointManager:onReceiveEvent(event, ...)
     local eventObserver = self.eventObserverMap[event] or {}
     for _, observer in ipairs(eventObserver) do
-        local isShow, redPointType = observer:isShow(...)
+        local showType, showNum = observer:getShowInfo(...)
         local redId = observer:getId()
         local uiRedPoint = self.uiRedPointMap[redId]
-        uiRedPoint:setShow(isShow, redPointType)
+        uiRedPoint:updateShow(showType, showNum)
     end
 end
 

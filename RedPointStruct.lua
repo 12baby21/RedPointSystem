@@ -29,18 +29,20 @@ local redPointConfig = {
     }
 ]]
 
---- 仍遗留问题：
 function RedPointStruct:ctor(params)
     --- ctor方法必需参数
     self.id = params.id                 -- 红点唯一id
-    self.isLeaf = params.isLeaf         -- 是否是叶子结点 ?
     self.idString = params.idString     -- 完整的层级结构
     --- ctor方法可选参数
     --- 如果没有更新方法直接找孩子即可
-    self._updateFuncMap = {}        -- key为红点类型，value为回调函数列表，红点条件采用的逻辑关系暂未确定
+    self.updateFuncMap = {}        -- key为红点类型，value为回调函数列表，红点条件采用的逻辑关系暂未确定
+    self.registeredType = {}        -- 注册过的红点类型，用于优先级判断
+                                    -- false = 0
+    self.dirtyMap = {}
+    self.isShowMap = {}
 
 
-    self.isDirty = false        -- 脏标，子红点刷新了，更新子红点
+
     ---@type RedPointStruct
     self.parent = params.parent
     ---@type RedPointStruct[]
@@ -48,34 +50,33 @@ function RedPointStruct:ctor(params)
     self.childCnt = 0       -- 记录子红点数量，用于当没有子红点时删除父红点的此红点
     self.showNumber = 1     -- 大于零认为可以显示
     self.redPointCnt = 0            -- 数字红点，统计子红点的红点数
-    self:_initUpdateFunc(params.funcMap)
+    self:setUpdateFunc(params.funcMap)
 
     -- todo: 或许可以保存根结点，便于反向查找
 end
 
---- _initUpdateFunc 设置红点刷新函数
+--- setUpdateFunc 设置红点刷新函数
 --- 因为一个红点可以被拆成多个条件，所以采用队列形式保存
-function RedPointStruct:_initUpdateFunc(funcMap)
+function RedPointStruct:setUpdateFunc(funcMap)
+    if not funcMap then
+        return
+    end
     for _, v in pairs(funcMap) do
-        if not self._updateFuncMap[v.type] then
-            self._updateFuncMap[v.type] = {
+        if not self.updateFuncMap[v.type] then
+            self.updateFuncMap[v.type] = {
                 isDirty = true,
                 funcList = {},
             }
+            self.registeredType[v.type] = true
         end
-        local funcList = self._updateFuncMap[v.type].funcList
+        local funcList = self.updateFuncMap[v.type].funcList
         funcList[#funcList + 1] = v.updateFunc
     end
 end
 
-function RedPointStruct:setUpdateFunc(funcMap)
-
-end
-
---- 初步考虑，当数据变化时，递归setDirty，实际需要刷新的时候，才进行计算，减小性能消耗
---- UI刷新后重置本node脏标
+---setDirty 设置脏标
 function RedPointStruct:setDirty(isDirty, redPointType)
-    self.isDirty = isDirty
+    self.dirtyMap[redPointType] = isDirty
     if isDirty and self.parent then
         self.parent:setDirty(isDirty, redPointType)
     end
@@ -104,7 +105,7 @@ function RedPointStruct:removeChild(id)
         if self.parent then
             self.parent:removeChild(self.id)
         else
-            -- todo:没有父红点，说明这是根红点，从森林中移除
+            sgs.RedPointManager:removeTree(self.id)
         end
     end
 end
@@ -114,35 +115,42 @@ function RedPointStruct:setParent(parent)
     self.parent = parent
 end
 
----isShow todo:逻辑需要补全
----@return number 大于0代表有红点
-function RedPointStruct:isShow(customData, showType)
-    if not self.isLeaf and not self.isDirty then
-        --- 不是叶子结点 && 没有脏标   ->   不用重新统计
-        return self.showNumber
+
+---isShow 实际刷新红点数据，供UI使用
+---@return number
+function RedPointStruct:isShow(showType)
+    --- 没有脏标，直接返回当前保存的值
+    if not self.isDirty then
+        return self.isShowMap[showType]
     end
 
-    if not self.isLeaf and self.isDirty then
-        --- 不是叶子结点 && 有脏标   ->   重新统计孩子结点的数据
-        self.showNumber = 0
-        for _, child in pairs(self.children) do
-            local childNum = child:isShow(customData)
-            self.showNumber = self.showNumber + childNum
+    --- 判断自身红点
+    local showNum = self.updateFuncMap[showType] and self.updateFuncMap[showType]() or 0
+    for _, child in pairs(self.child) do
+        -- 如果有一个红点为true
+        showNum = showNum + child:isShow(showType)
+        if showNum > 0 and showType ~= RedPointConst.TYPE.NUMBER then
+            break
         end
-        return self.showNumber
     end
+    self.dirtyMap[showType] = false
+    self.isShowMap[showType] = showNum
+    return showNum
+end
 
-    --- 叶子结点   ->   通过刷新方法获取红点数据
-    if self.updateFunc then
-        local oldShowNumber = self.showNumber
-        self.showNumber = self.updateFunc(customData)
-        if self.parent and oldShowNumber ~= self.showNumber then
-            self.parent:setDirty(true)
+---getShowInfo 获取显示数据
+---会根据红点优先级进行返回
+---@return number, number 红点类型，红点显示状态
+function RedPointStruct:getShowInfo()
+    for _, t in ipairs(RedPointConst.PRIORITY) do
+        if self.registeredType[t] then
+            local showNum = self:isShow(t)
+            if showNum > 0 then
+                return t, showNum
+            end
         end
-        return self.showNumber
     end
-
-    return 0
+    return RedPointConst.TYPE.NONE, 0
 end
 
 

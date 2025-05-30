@@ -81,39 +81,6 @@ function RedPointTree:deleteRedPointStruct(idString)
     return true
 end
 
--- 修改节点的红点数
-function RedPointTree:ChangeRedpointCnt(name, delta)
-    local targetNode =self:getRedPointStruct(name)
-    if nil == targetNode then
-        return
-    end
-    -- 如果是减红点，并且红点数不够减了，则调整delta，使其不减为0
-    if delta < 0 and targetNode.redpointCnt + delta < 0 then
-        delta = -targetNode.redpointCnt
-    end
-
-    local node = self.root
-    local pathList = LuaUtil.SplitString(name, "|")
-    for _, path in pairs(pathList) do
-        local childNode = node.children[path]
-        childNode.redpointCnt = childNode.redpointCnt + delta
-        node = childNode
-        -- 调用回调函数
-        for _, cb in pairs(node.updateCb) do
-            cb(node.redpointCnt)
-        end
-    end
-end
-
--- 查询节点的红点数
-function RedPointTree:GetRedpointCnt(name)
-    local node = self:getRedPointStruct(name)
-    if nil == node then
-        return 0
-    end
-    return node.redpointCnt or 0
-end
-
 ---register 递归地注册红点
 ---params = { idString }
 function RedPointTree:register(params)

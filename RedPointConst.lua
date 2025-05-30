@@ -15,4 +15,13 @@ RedPointConst.TYPE = {
     CUSTOM1 = 4,        -- 自定义，往后递增
 }
 
+--- 红点优先级定义
+RedPointConst.PRIORITY = {
+    [1] = "NONE",
+    [2] = "NEW",
+    [3] = "NORMAL",
+    [4] = "NUMBER",
+    [5] = "CUSTOM1",
+}
+
 return RedPointConst

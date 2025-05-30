@@ -17,35 +17,39 @@ function UIRedPointNode:ctor()
     self.idString = ""
     self.redPointNode = nil
     self.redPointType = RedPointConst.NONE
-    self.isShow = false
+    self.showNum = 0
 end
 
-function UIRedPointNode:setShow(isShow, redPointType)
-    if self.isShow == isShow and self.redPointType == redPointType then
-        return
-    end
-    if self.redPointType == RedPointConst.TYPE.NONE then
-        self.isShow = false
-
+function UIRedPointNode:updateShow(showNum, redPointType)
+    if self.showNum == showNum and self.redPointType == redPointType then
+        --- 状态相同，不用显示刷新
         return
     end
 
-    if self.redPointType ~= redPointType then
-        self.redPointType = redPointType
-        self:removeAllChildren()
-        local redPointNode = nil
-        if redPointType == RedPointConst.TYPE.NEW then
-            self.redPointNode = display.newSprite("redPoint/new.png")
-        elseif redPointType == RedPointConst.TYPE.NORMAL then
-            self.redPointNode = display.newSprite("redPoint/normal.png")
-        elseif redPointType == RedPointConst.TYPE.NUMBER then
-            self.redPointNode = display.newSprite("redPoint/number.png")
-        end
-        if self.redPointNode then
-            self:addChild(self.redPointNode)
-        end
+    self.showNum = showNum
+    if (redPointType == RedPointConst.TYPE.NONE or showNum == 0) and self.redPointNode then
+        self.redPointNode:setVisible(false)
+        return
     end
 
+    -- todo: ui刷新逻辑后期补全
+    if showNum > 0 then
+        if self.redPointType ~= redPointType then
+            --- 显示类型不同，则需要刷新
+            self.redPointType = redPointType
+            self:removeAllChildren()
+            if redPointType == RedPointConst.TYPE.NEW then
+                self.redPointNode = display.newSprite("redPoint/new.png")
+            elseif redPointType == RedPointConst.TYPE.NORMAL then
+                self.redPointNode = display.newSprite("redPoint/normal.png")
+            elseif redPointType == RedPointConst.TYPE.NUMBER then
+                self.redPointNode = display.newSprite("redPoint/number.png")
+            end
+            if self.redPointNode then
+                self:addChild(self.redPointNode)
+            end
+        end
+    end
 end
 
 
