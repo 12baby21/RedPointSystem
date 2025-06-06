@@ -155,5 +155,7 @@ function RedPointManager:onReceiveEvent(event, ...)
     end
 end
 
+------------------------------------------- TEST -------------------------------------------
+
 
 return RedPointManager

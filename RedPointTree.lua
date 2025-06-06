@@ -78,14 +78,14 @@ function RedPointTree:register(params)
             --- 有这个红点
             break
         end
-        --- 当前构造的红点
+        --- 当前构造的红点(父红点)
         local curNode = RedPointStruct.new({
             id = id,
             idString = idString,
         })
         curNode:addChild(child)
         child:setParent(curNode)
-        curNode = child
+        --curNode = child
         self.redPointNodeMap[id] = child
     end
     if not self.root then
@@ -94,6 +94,27 @@ function RedPointTree:register(params)
         assert(self.root:getId() == ids[1], "根节点红点id不一致，请核实")
     end
     self.redPointNodeMap[ids[#ids]]:setUpdateFunc(params.updateFunc)        -- 叶子结点设置方法
+end
+
+---registerToParent 向父红点添加红点
+function RedPointTree:registerToParent(id, parentId)
+    if self.redPointNodeMap[id] then
+        dump("红点已经存在")
+        return
+    end
+    local parentNode = self.redPointNodeMap[parentId]
+    if not parentNode then
+        dump("父红点不存在")
+        return
+    end
+    local idString = string.format("%s|%d", parentNode:getIdString(), id)
+    local node = RedPointStruct.new({
+        id = id,
+        idString = idString,
+    })
+    parentNode:addChild(node)
+    node:setParent(parentNode)
+    self.redPointNodeMap[id] = node
 end
 
 ---setUpdateFunc 设置某一个红点的刷新方法

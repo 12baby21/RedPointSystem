@@ -11,24 +11,6 @@ local RedPointStruct = class("RedPointStruct")
 ---@type RedPointConst
 local RedPointConst = require("RedPointConst")
 
---[[
-    红点判断方法
-]]
-
-local redPointConfig = {
-    [1] = {
-        func = function()  end,
-        events = {}
-    }
-}
-
---[[
-    params = {
-        id: number 唯一标识
-        type: RedPointConst.TYPE  deprecated 显示类型应当属于ui层
-    }
-]]
-
 function RedPointStruct:ctor(params)
     --- ctor方法必需参数
     self.id = params.id                 -- 红点唯一id
@@ -41,10 +23,6 @@ function RedPointStruct:ctor(params)
     self.dirtyMap = {}
     self.isShowMap = {}
 
-
-
-    ---@type RedPointStruct
-    self.parent = params.parent
     ---@type RedPointStruct[]
     self.children = {}      -- 保存所有的子红点，当向下查询红点时，可以不用重复计算红点
     self.childCnt = 0       -- 记录子红点数量，用于当没有子红点时删除父红点的此红点
