@@ -21,10 +21,11 @@ local RedPointStruct = require("RedPointStruct")
 
 function RedPointManager:ctor()
     ---@type RedPointTree[]
-    self.redPointForest = {}            -- 红点森林，方便管理孤立结点，key为红点id
+    self.redPointForest = {}            -- 红点森林，方便管理孤立结点，key为根节点红点id
     ---@type RedPointStruct[][]
-    self.eventObserverMap = {}          -- 事件观察者，通过事件触发红点，key为事件string
-    self.uiRedPointMap = {}             -- 管理UI，事件触发时，要刷新的红点
+    self.eventObserverMap = {}          -- 事件观察者，通过事件触发红点，key为事件string，每次数据来都要处理的
+    -- 不能用红点id吧，因为可能有多个道具，考虑用idString
+    self.redPointUIMap = {}             -- 管理UI，事件触发时，要刷新的红点，用红点id作为key
 end
 
 --- 通过完整路径注册
@@ -47,7 +48,7 @@ function RedPointManager:register(redPointParams)
             self.eventObserverMap[event] = {}
         end
         local eventObserver = self.eventObserverMap[event]
-        eventObserver[#eventObserver+1] = redPointStruct
+        eventObserver[redPointStruct:getId()] = redPointStruct
     end
 end
 
@@ -79,13 +80,7 @@ function RedPointManager:unregister(idString)
     local events = redPointStruct:getTriggerEvents()
     for _, event in ipairs(events) do
         local eventObserver = self.eventObserverMap[event]
-        for pos, v in ipairs(eventObserver) do
-            if v.id == redPointStruct.id then
-                -- todo: 用map性能优化？
-                table.remove(eventObserver, pos)
-                break
-            end
-        end
+        eventObserver[redPointStruct:getId()] = nil
     end
 
     --- 从红点树上移除
@@ -129,11 +124,18 @@ function RedPointManager:getRedPointNodeById(id)
     return nil
 end
 
+--[[
+
+]]
+
+
 --- 进入界面时绑定红点ui(完整路径注册)
 function RedPointManager:bind(uiRedPoint, idString)
     local redPointNode = self:getRedPointNode(idString)
     if redPointNode then
-        self.uiRedPointMap[redPointNode:getId()] = uiRedPoint
+        self.redPointUIMap[idString] = uiRedPoint
+    else
+        dump("没有相应的逻辑红点")
     end
 end
 
@@ -141,7 +143,7 @@ end
 function RedPointManager:unbind(idString)
     local redPointNode = self:getRedPointNode(idString)
     if redPointNode then
-        self.uiRedPointMap[redPointNode:getId()] = nil
+        self.redPointUIMap[idString] = nil
     end
 end
 
@@ -150,7 +152,7 @@ function RedPointManager:onReceiveEvent(event, ...)
     for _, observer in ipairs(eventObserver) do
         local showType, showNum = observer:getShowInfo(...)
         local redId = observer:getId()
-        local uiRedPoint = self.uiRedPointMap[redId]
+        local uiRedPoint = self.redPointUISMap[redId]
         uiRedPoint:updateShow(showType, showNum)
     end
 end

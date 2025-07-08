@@ -24,4 +24,9 @@ RedPointConst.PRIORITY = {
     [5] = "CUSTOM1",
 }
 
+--- 需要判断所有子红点的红点类型
+RedPointConst.FULL_CHECK_TYPE = {
+    RedPointConst.TYPE.NUMBER,
+}
+
 return RedPointConst

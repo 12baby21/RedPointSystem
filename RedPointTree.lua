@@ -85,7 +85,6 @@ function RedPointTree:register(params)
         })
         curNode:addChild(child)
         child:setParent(curNode)
-        --curNode = child
         self.redPointNodeMap[id] = child
     end
     if not self.root then
@@ -97,15 +96,16 @@ function RedPointTree:register(params)
 end
 
 ---registerToParent 向父红点添加红点
+---@return boolean 是否注册成功
 function RedPointTree:registerToParent(id, parentId)
     if self.redPointNodeMap[id] then
         dump("红点已经存在")
-        return
+        return false
     end
     local parentNode = self.redPointNodeMap[parentId]
     if not parentNode then
         dump("父红点不存在")
-        return
+        return false
     end
     local idString = string.format("%s|%d", parentNode:getIdString(), id)
     local node = RedPointStruct.new({
@@ -115,6 +115,7 @@ function RedPointTree:registerToParent(id, parentId)
     parentNode:addChild(node)
     node:setParent(parentNode)
     self.redPointNodeMap[id] = node
+    return true
 end
 
 ---setUpdateFunc 设置某一个红点的刷新方法

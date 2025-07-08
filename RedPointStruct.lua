@@ -11,6 +11,8 @@ local RedPointStruct = class("RedPointStruct")
 ---@type RedPointConst
 local RedPointConst = require("RedPointConst")
 
+
+
 function RedPointStruct:ctor(params)
     --- ctor方法必需参数
     self.id = params.id                 -- 红点唯一id
@@ -20,13 +22,11 @@ function RedPointStruct:ctor(params)
     self.updateFuncMap = {}        -- key为红点类型，value为回调函数列表，红点条件采用的逻辑关系暂未确定
     self.registeredType = {}        -- 注册过的红点类型，用于优先级判断
                                     -- false = 0
-    self.dirtyMap = {}
-    self.isShowMap = {}
+    self.dirtyMap = {}      -- isDirty, showValue
 
     ---@type RedPointStruct[]
     self.children = {}      -- 保存所有的子红点，当向下查询红点时，可以不用重复计算红点
     self.childCnt = 0       -- 记录子红点数量，用于当没有子红点时删除父红点的此红点
-    self.showNumber = 1     -- 大于零认为可以显示
     self.redPointCnt = 0            -- 数字红点，统计子红点的红点数
     self:setUpdateFunc(params.funcMap)
 
@@ -54,7 +54,7 @@ end
 
 ---setDirty 设置脏标
 function RedPointStruct:setDirty(isDirty, redPointType)
-    self.dirtyMap[redPointType] = isDirty
+    self.dirtyMap[redPointType].isDirty = isDirty
     if isDirty and self.parent then
         self.parent:setDirty(isDirty, redPointType)
     end
@@ -95,27 +95,34 @@ function RedPointStruct:setParent(parent)
     self.parent = parent
 end
 
+---_canEarlyBreak 是否可以提前结束子红点判断（一个为真即可）
+function RedPointStruct:_canEarlyBreak(showType)
+    return not table.indexof(RedPointConst.FULL_CHECK_TYPE, showType)
+end
 
 ---isShow 实际刷新红点数据，供UI使用
 ---@return number
-function RedPointStruct:isShow(showType)
+function RedPointStruct:isShow(showType, customData)
     --- 没有脏标，直接返回当前保存的值
-    if not self.isDirty then
-        return self.isShowMap[showType]
+    if self.dirtyMap[showType] and not self.dirtyMap[showType].isDirty then
+        return self.dirtyMap[showType].showValue
     end
 
-    --- 判断自身红点
-    local showNum = self.updateFuncMap[showType] and self.updateFuncMap[showType]() or 0
+    --- 如果自身有刷新方法，优先判断自己的刷新方法
+    local myUpdateFunc = self.updateFuncMap[showType]
+    local showValue = myUpdateFunc and myUpdateFunc(customData) or 0
+
     for _, child in pairs(self.child) do
         -- 如果有一个红点为true
-        showNum = showNum + child:isShow(showType)
-        if showNum > 0 and showType ~= RedPointConst.TYPE.NUMBER then
+        showValue = showValue + child:isShow(showType)
+        --- 如果不是数字类红点
+        if showValue > 0 and self:_canEarlyBreak(showType) then
             break
         end
     end
-    self.dirtyMap[showType] = false
-    self.isShowMap[showType] = showNum
-    return showNum
+    self.dirtyMap[showType].isDirty = false
+    self.dirtyMap[showType].showValue = showValue
+    return showValue
 end
 
 ---getShowInfo 获取显示数据
