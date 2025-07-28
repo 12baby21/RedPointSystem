@@ -2,14 +2,15 @@
 
 ---@class RedPointTree
 local RedPointTree = class("RedPointTree")
-local RedPointStruct = require("RedPointStruct")
+local RedPointStruct = require("redPoint.RedPointStruct")
 ---@type LuaUtils
-local LuaUtils = require("LuaUtils")
+local LuaUtils = require("redPoint.LuaUtils")
 ---@type RedPointManager
-local RedPointManager = require("RedPointManager")
+local RedPointManager = sgs.RedPointManager
 
 
 function RedPointTree:ctor(params)
+    ---@type RedPointStruct
     self.root = nil
     ---@type table<number, RedPointStruct>
     self.redPointStructMap = {}       -- key为红点id
@@ -128,6 +129,38 @@ function RedPointTree:register(params)
     self.redPointStructMap[ids[#ids]]:setUpdateFunc(params.updateFunc)        -- 叶子结点设置方法
 end
 
+---tryRegisterToParent 尝试注册红点，如果没有父红点则创建
+---@return number 根红点的id
+function RedPointTree:tryRegisterToParent(params)
+    local id = params.id
+    local parentId = params.parentId
+    local isRootChanged = false
+    local oldRootId = self.root.id
+    local parentStruct = self.redPointStructMap[parentId]
+    if not parentStruct then
+        parentStruct = RedPointStruct.new({
+            id = parentId,
+            idString = tostring(parentId),
+        })
+        isRootChanged = true
+        self.root = parentStruct
+        self.redPointStructMap[parentId] = parentStruct
+    end
+    local redPointStruct = self.redPointStructMap[id]
+    if not redPointStruct then
+        redPointStruct = RedPointStruct.new({
+            id = id,
+            idString = parentStruct.idString .. "|" .. id,
+        })
+        self.redPointStructMap[id] = redPointStruct
+    end
+    --- 这里放在外面是因为，即使子红点存在，但可能原来是根结点，所以也需要替换下
+    redPointStruct.parent = parentStruct
+    parentStruct:addChild(redPointStruct)
+    redPointStruct:setUpdateFunc(params.funcMap)
+    return { isRootChanged = isRootChanged, newRootId = self.root.id, oldRootId = oldRootId }
+end
+
 ---registerToParent 向父红点添加红点
 ---@return boolean 是否注册成功
 function RedPointTree:registerToParent(id, parentId)
@@ -156,6 +189,12 @@ function RedPointTree:setUpdateFunc(id, updateFunc)
     if self.redPointStructMap[id] then
         self.redPointStructMap[id]:setUpdateFunc(updateFunc)
     end
+end
+
+---hasRedPointStruct 红点树上是否有某个id的红点
+function RedPointTree:hasRedPointStruct(id)
+    return id and self.redPointStructMap[id]
+
 end
 
 return RedPointTree

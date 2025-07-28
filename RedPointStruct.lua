@@ -9,7 +9,7 @@
 ---@class RedPointStruct
 local RedPointStruct = class("RedPointStruct")
 ---@type RedPointConst
-local RedPointConst = require("RedPointConst")
+local RedPointConst = require("redPoint.RedPointConst")
 
 
 
@@ -28,6 +28,7 @@ function RedPointStruct:ctor(params)
     ---@type RedPointStruct[]
     self.children = {}      -- 保存所有的子红点，当向下查询红点时，可以不用重复计算红点
     self.childCnt = 0       -- 记录子红点数量，用于当没有子红点时删除父红点的此红点
+    self.parent = nil
     self:setUpdateFunc(params.funcMap)
 
     -- todo: 或许可以保存根结点，便于反向查找
@@ -139,6 +140,10 @@ function RedPointStruct:getShowInfo(customData)
         end
     end
     return RedPointConst.TYPE.NONE, 0
+end
+
+function RedPointStruct:updateIdString(parentIdString)
+    self.idString = parentIdString .. "|" .. self.id
 end
 
 ----------------------------------------------- getter -----------------------------------------------

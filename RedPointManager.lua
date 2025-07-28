@@ -7,16 +7,24 @@
 ---
 
 ---@class RedPointManager
-local RedPointManager = class("RedPointManager")
+local RedPointManager = {}
+RedPointManager.__index = RedPointManager
+
 ---@type RedPointTree
-local RedPointTree = require("RedPointTree")
+local RedPointTree = require("redPoint.RedPointTree")
 ---@type LuaUtils
-local LuaUtils = require("LuaUtils")
----@type RedPointStruct
-local RedPointStruct = require("RedPointStruct")
+local LuaUtils = require("redPoint.LuaUtils")
 
+local _instance = nil
+function RedPointManager:getInstance()
+    if _instance == nil then
+        _instance = setmetatable({}, RedPointManager)
+        _instance:init()
+    end
+    return _instance
+end
 
-function RedPointManager:ctor()
+function RedPointManager:init()
     ---@type RedPointTree[]
     self.redPointForest = {}            -- 红点森林，方便管理孤立结点，key为根节点红点id
     ---@type RedPointStruct[][]
@@ -25,7 +33,51 @@ function RedPointManager:ctor()
     self.redPointNodeMap = {}
 end
 
---- 通过完整路径注册
+---tryRegisterToParent 尝试注册到父红点上，支持动态注册，但是需要保证红点id唯一
+function RedPointManager:tryRegisterToParent(params)
+    ---@type RedPointTree
+    local childTree = nil       -- 子红点树
+    ---@type RedPointTree
+    local parentTree = nil      -- 父红点所在的红点树
+
+    --- 1. 若存在，找到父红点和子红点树
+    for _, redPointTree in pairs(self.redPointForest) do
+        if redPointTree:hasRedPointStruct(params.id) then
+            childTree = redPointTree
+        end
+        if redPointTree:hasRedPointStruct(params.parentId) then
+            parentTree = redPointTree
+        end
+    end
+    if childTree and parentTree then
+        -- 如果都存在，则需要判断是否是相同的树
+        -- 如果是相同的树，结构已经确定了，只需要更新即可
+        -- 如果不是相同的树，需要把子树挂到父红点所在的树上
+        if not self:isSameTree(childTree, parentTree) then
+            local parentStruct = parentTree:getRedPointStructById(params.parentId)
+            local childStruct = childTree:getRedPointStructById(params.id)
+            parentStruct:addChild(childStruct)
+            childStruct:setUpdateFunc(params.funcMap)
+            self.redPointForest[childTree.rootId] = nil     -- 移除子树
+        end
+    elseif not childTree and not parentTree then
+        -- 红点树不存在：创建一棵新树
+        tree = RedPointTree.new({
+            idString = table.concat({ params.parentId, "|", params.id })
+        })
+        self.redPointForest[params.parentId] = tree
+    else
+        local tree = childTree or parentTree
+        -- 只有子树，需要一个父红点
+        local changeParams = tree:tryRegisterToParent(params)
+        if changeParams.isRootChanged then
+            self.redPointForest[changeParams.newRootId] = tree
+            self.redPointForest[changeParams.oldRootId] = nil
+        end
+    end
+end
+
+---register 通过完整的红点路径注册     todo:注册完成后移除子红点树
 function RedPointManager:register(redPointParams)
     local ids = LuaUtils.splitString(redPointParams.idString, "|")
     local rootId = checkint(ids[1])
@@ -63,6 +115,11 @@ function RedPointManager:registerToParent(parentId, redId)
             idString = idString,
         })
     end
+end
+
+function RedPointManager:isSameTree(tree1, tree2)
+    return tree1 and tree2 and tree1.rootId == tree2.rootId
+
 end
 
 function RedPointManager:unregister(idString)
