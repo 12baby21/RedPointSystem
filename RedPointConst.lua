@@ -8,11 +8,11 @@
 local RedPointConst = {}
 
 RedPointConst.TYPE = {
-    NONE = 0,           -- 没有红点
-    NEW = 1,            -- new红点
-    NORMAL = 2,         -- 普通红点
-    NUMBER = 3,         -- 数字红点
-    CUSTOM1 = 4,        -- 自定义，往后递增
+    NONE = 1,           -- 没有红点
+    NEW = 2,            -- new红点
+    NORMAL = 3,         -- 普通红点
+    NUMBER = 4,         -- 数字红点
+    CUSTOM1 = 5,        -- 自定义，往后递增
 }
 
 --- 红点优先级定义

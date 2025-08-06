@@ -14,11 +14,12 @@ function LuaUtils.isStrNullOrEmpty(str)
     return str == nil or str == ""
 end
 
-function LuaUtils:splitString(delimiter)
+function LuaUtils.splitString(str, delimiter)
     delimiter = delimiter or "|"
     -- 通过分隔符delimiter分割字符串到table
     local result = {}
-    for match in (string.gmatch(delimiter, "[^%s]+")) do
+    local pattern = "[^" .. delimiter .. "]+"
+    for match in string.gmatch(str, pattern) do
         table.insert(result, match)
     end
     return result

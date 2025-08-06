@@ -6,6 +6,7 @@
 --- Singleton
 ---
 
+
 ---@class RedPointManager
 local RedPointManager = {}
 RedPointManager.__index = RedPointManager
@@ -14,6 +15,8 @@ RedPointManager.__index = RedPointManager
 local RedPointTree = require("redPoint.RedPointTree")
 ---@type LuaUtils
 local LuaUtils = require("redPoint.LuaUtils")
+
+local RedPointManager = class("RedPointManager")
 
 local _instance = nil
 function RedPointManager:getInstance()
@@ -24,13 +27,22 @@ function RedPointManager:getInstance()
     return _instance
 end
 
+function RedPointManager:ctor()
+    -- 给任何对象添加事件监听和派发能力（不必继承 Node）
+    -- cc(self):addComponent("components.behavior.EventProtocol"):exportMethods()
+    -- cc(self):addComponent("app.components.Notification"):exportMethods()
+    self:init()
+    self.netEngine = app:netEngine()
+end
+
 function RedPointManager:init()
     ---@type RedPointTree[]
     self.redPointForest = {}            -- 红点森林，方便管理孤立结点，key为根节点红点id
-    ---@type RedPointStruct[][]
+    ---@type table<string, table<string, RedPointStruct>>
     self.eventObserverMap = {}          -- 事件观察者，通过事件触发红点，key为事件string，每次数据来都要处理的
     ---@type table<string, RedPointNode>
     self.redPointNodeMap = {}
+
 end
 
 ---tryRegisterToParent 尝试注册到父红点上，支持动态注册，但是需要保证红点id唯一
@@ -62,64 +74,102 @@ function RedPointManager:tryRegisterToParent(params)
         end
     elseif not childTree and not parentTree then
         -- 红点树不存在：创建一棵新树
-        tree = RedPointTree.new({
-            idString = table.concat({ params.parentId, "|", params.id })
+        local parentId = params.parentId and params.parentId ~= "" and params.parentId or nil 
+        local idString = params.id
+        if params.parentId then
+            idString = table.concat({params.parentId, "|", idString})
+        end
+        local tree = RedPointTree.new({
+            idString = idString,
+            funcMap = params.funcMap,
         })
-        self.redPointForest[params.parentId] = tree
+        self.redPointForest[tree.root.id] = tree
+        local redPointStruct = tree:getRedPointStructById(params.id)
+        for redPointType, func in pairs(params.funcMap or {}) do
+            local triggerEvents = func.events
+            self:updateEventObserver(redPointStruct, triggerEvents, redPointType)
+        end
     else
         local tree = childTree or parentTree
-        -- 只有子树，需要一个父红点
+        -- 如果只有子红点树，需要重构红点树和红点森林的映射
         local changeParams = tree:tryRegisterToParent(params)
         if changeParams.isRootChanged then
             self.redPointForest[changeParams.newRootId] = tree
             self.redPointForest[changeParams.oldRootId] = nil
         end
-    end
+        local redPointStruct = tree:getRedPointStructById(params.id)
+        for redPointType, func in pairs(params.funcMap or {}) do
+            local triggerEvents = func.events
+            self:updateEventObserver(redPointStruct, triggerEvents, redPointType)
+        end
+    end    
 end
 
----register 通过完整的红点路径注册     todo:注册完成后移除子红点树
-function RedPointManager:register(redPointParams)
-    local ids = LuaUtils.splitString(redPointParams.idString, "|")
-    local rootId = checkint(ids[1])
-    local insertResult = false          -- 插入成功才需要
+---register 通过完整的红点路径注册
+function RedPointManager:registerWithFullPath(params)
+    local idString = params.idString
+    local ids = LuaUtils.splitString(idString, "|")
+    local rootId = ids[1]
     if self.redPointForest[rootId] == nil then
         --- 没有这颗树，直接构造一颗新的红点树
-        self.redPointForest[rootId] = RedPointTree.new(redPointParams)
-        insertResult = true
-    else
-        local redPointTree = self.redPointForest[rootId]
-        insertResult = redPointTree:insertNode(ids)
-    end
-    local redPointStruct = self.redPointForest[rootId]:getRedPointStruct(checkint(ids[#ids]))
-    local triggerEvents = redPointParams.events
-    for _, event in ipairs(triggerEvents) do
-        if not self.eventObserverMap[event] then
-            self.eventObserverMap[event] = {}
-        end
-        local eventObserver = self.eventObserverMap[event]
-        eventObserver[redPointStruct:getId()] = redPointStruct
-    end
-end
-
-function RedPointManager:registerToParent(parentId, redId)
-    if not parentId or parentId == 0 then
-        dump(string.format("无法注册父红点id为%d的红点", parentId))
-        return
-    end
-    assert(redId and redId > 0, "红点id有误")
-    local parentNode = self:getRedPointNodeById(parentId)
-    if parentNode then
-        local parentIdString = parentNode:getIdString()
-        local idString = table.concat({parentIdString, "|", redId})
-        self:register({
-            idString = idString,
+        self.redPointForest[rootId] = RedPointTree.new({
+            id = rootId,
+            funcMap = params.funcMap,
         })
     end
+    local redPointTree = self.redPointForest[rootId]
+    local redPointStruct = self.redPointForest[rootId]:getRedPointStruct(ids[#ids])
+    for redPointType, func in pairs(params.funcMap or {}) do
+        local triggerEvents = func.events
+        self:updateEventObserver(redPointStruct, triggerEvents, redPointType)
+    end
 end
 
-function RedPointManager:isSameTree(tree1, tree2)
-    return tree1 and tree2 and tree1.rootId == tree2.rootId
+---updateEventObserver 订阅事件
+function RedPointManager:updateEventObserver(observer, events, redPointType)
+    for _, event in ipairs(events or {}) do
+        if not self.eventObserverMap[event] then
+            self.eventObserverMap[event] = {}
+            self.netEngine:addEventListener(event, handler(self, self.onReceiveEvent))
+        end
+        local eventObserver = self.eventObserverMap[event]
+        eventObserver[observer:getId()] = {
+            redPointStruct = observer,
+            redPointType = redPointType,
+        }
+    end
+end
 
+---bind @必须手动绑定
+---@param uiRedPoint node @红点UI
+---@param id string @id是逻辑红点唯一id
+function RedPointManager:bind(uiRedPoint, id)
+    local redPointStruct = self:getRedPointStructById(id)
+    if redPointStruct then
+        local list = self.redPointNodeMap[id] or {}
+        list[#list + 1] = uiRedPoint
+        self.redPointNodeMap[id] = list
+    else
+        printInfo(string.format("There is no logic red point with id: %s", id))
+        return false
+    end
+end
+
+---unbind 红点Node onExit时会自动执行，无需手动调用
+function RedPointManager:unbind(redPointUI, id)
+    local observerUiList = self.redPointNodeMap[id]
+    if observerUiList then
+        local index = table.indexof(observerUiList, redPointUI)
+        if index then
+            table.remove(observerUiList, index)
+        end
+    end
+end
+
+---unBindAllById 离开界面时移除逻辑红点id对应的所有红点node
+---这个方法是为了解决同一个id绑定的过多，一个个移除性能太低，使用时需要明确业务需求
+function RedPointManager:unBindAllById(id)
+    self.redPointNodeMap[id] = nil
 end
 
 function RedPointManager:unregister(idString)
@@ -137,7 +187,7 @@ function RedPointManager:unregister(idString)
     end
 
     --- 从红点树上移除
-    local redPointTree = self.redPointForest[checkint(ids[1])]
+    local redPointTree = self.redPointForest[ids[1]]
     if redPointTree then
         -- todo 直接从父结点删除
         redPointTree:unregister()
@@ -157,7 +207,7 @@ end
 ---@return RedPointStruct
 function RedPointManager:getRedPointStruct(idString)
     local ids = LuaUtils.splitString(idString, "|")
-    local rootId = checkint(ids[1])
+    local rootId = ids[1]       -- todo: 是否需要改成字符串？
     local redPointTree = self.redPointForest[rootId]
     if rootId == 0 or not redPointTree then
         printError(string.format("没有找到路径为%s的红点树不存在", idString))
@@ -167,10 +217,10 @@ function RedPointManager:getRedPointStruct(idString)
     return redPointTree:getRedPointStructById(ids[#ids])
 end
 
----getRedPointNodeById 通过唯一红点id获取红点（尽量不要使用）
-function RedPointManager:getRedPointNodeById(id)
+---getRedPointStructById 通过唯一红点id获取红点（尽量不要使用）
+function RedPointManager:getRedPointStructById(id)
     for _, redPointTree in pairs(self.redPointForest) do
-        local redPointStruct = redPointTree:getRedPointNodeById(id)
+        local redPointStruct = redPointTree:getRedPointStructById(id)
         if redPointStruct then
             return redPointStruct
         end
@@ -178,44 +228,54 @@ function RedPointManager:getRedPointNodeById(id)
     return nil
 end
 
---- 进入界面时绑定红点ui(完整路径注册)
-function RedPointManager:bind(uiRedPoint, idString)
-    local redPointNode = self:getRedPointStruct(idString)
-    if redPointNode then
-        local list = self.redPointNodeMap[idString] or {}
-        local bindKey = tostring(#list + 1)
-        list[bindKey] = uiRedPoint
-        self.redPointNodeMap[idString] = list
-        return true
-    else
-        dump("没有相应的逻辑红点")
-        return false
-    end
-end
 
---- 离开界面时移除红点ui todo延迟移除
-function RedPointManager:unbind(idString, redPointUI)
-    local observerUiList = self.redPointNodeMap[idString]
-    table.remove(observerUiList, redPointUI)
-end
 
 function RedPointManager:onReceiveEvent(event, ...)
     --- 1. 收到刷新的事件
     --- 2. 找到对应的逻辑红点进行脏标设置
     --- 3. 找到受影响的红点UI进行实际的计算
-    local eventObserver = self.eventObserverMap[event] or {}
-    for _, observer in ipairs(eventObserver) do
-        local idString = observer:getIdString()
+    local eventName = event.name
+    local eventObserver = self.eventObserverMap[eventName] or {}
+    for _, observer in pairs(eventObserver) do
+        local redPointStruct = observer.redPointStruct
+        local idString = redPointStruct:getIdString()
         -- 事件触发时，没有办法知道影响的红点类型，只能全部设置脏标，除非在红点构造时就知道事件对应哪个红点类型
         -- 但这确实也是一种可以的做法，不这么做就全部设置脏标
-        observer:setDirty(true)
-        local observerUiList = self.redPointNodeMap[idString] or {}
+        redPointStruct:setDirty(true, observer.redPointType)
+        self:updateShow(redPointStruct)
+    end
+end
+
+--- 刷新UI显示，通过唯一id找相关的UI
+function RedPointManager:updateShow(redPointStruct)
+    while redPointStruct do
+        local id = redPointStruct.id
+        local observerUiList = self.redPointNodeMap[id] or {}
         for _, observerUI in ipairs(observerUiList) do
             local customData = observerUI:getCustomData()
-            local showType, showNum = observer:getShowInfo(customData)
+            local showType, showNum = redPointStruct:getShowInfo(customData)
             observerUI:updateShow(showType, showNum)
         end
+        redPointStruct = redPointStruct.parent
     end
+end
+
+function RedPointManager:forceUpdateRedPoint(redPointNode)
+    local customData = redPointNode:getCustomData()
+    local redPointStruct = self:getRedPointStruct(redPointNode.idString)
+    local showType, showNum = redPointStruct:getShowInfo("EVENT_FORCE_UPDATE_RED_POINT", customData)
+    redPointNode:updateShow(showType, showNum)
+end
+
+---isSameTree 根相同就认为是同一棵树
+function RedPointManager:isSameTree(tree1, tree2)
+    return tree1 and tree2 and tree1.rootId == tree2.rootId
+end
+
+---getIdStringById 根据逻辑红点id获取完整路径
+function RedPointManager:getIdStringById(id)
+    local redPointStruct = self:getRedPointStructById(id)
+    return redPointStruct and redPointStruct:getIdString() or ""
 end
 
 ------------------------------------------- TEST -------------------------------------------

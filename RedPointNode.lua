@@ -10,35 +10,34 @@ local RedPointNode = class("RedPointNode", function()
     return display.newNode()
 end)
 ---@type RedPointConst
-local RedPointConst = require("RedPointConst")
+local RedPointConst = require("redPoint.RedPointConst")
 ---@type RedPointManager
-local RedPointManager = require("RedPointManager")
+local RedPointManager = app.redPointManager
 
 ---@param customData table 自定义红点刷新数据
-function RedPointNode:ctor(params, customData)
+function RedPointNode:ctor(params)
     self.id = params.id
-    self.idString = params.idString
+    self.idString = params.idString or RedPointManager:getIdStringById(self.id)
     self.redPointType = RedPointConst.NONE
     self.showNum = 0
-    self.redPointNode = nil
-    self.getUIFunc = nil
-    self.customData = customData
-    self.removeTag = false
+    self.getUIFunc = params.getUIFunc
+    self.customData = params.customData
+    self:setNodeEventEnabled(true)
 
-    --[[
-        todo： 减少table.remove的次数
-        1. 新增移除标记，一次性移除，而不是每次退出界面移除 ✔
-        self.removeTag = false
-        2. 增加一个bindKey，很难找到这样的bindKey
-        self.bindKey = ""
-    ]]
+    -- view
+    self.redPointNode = nil
+    self.customRedPointNode = nil
+    self.numLabel = nil
 end
 
 --- 进入时就应该刷新红点
-function RedPointNode:onLoad()
-    --RedPointManager           调用RedPointManager的接口/发送事件
-                                -- 采用事件形式的话，需要确认是否需要区分同一刷新事件对应的红点，如何区分
-    RedPointManager:bind(self, self.idString)
+function RedPointNode:onEnter()
+    RedPointManager:bind(self, self.id)
+    RedPointManager:forceUpdateRedPoint(self)
+end
+
+function RedPointNode:onExit()
+    RedPointManager:unbind(self, self.id)
 end
 
 ---getCustomData 获取自定义数据
@@ -52,47 +51,73 @@ end
 
 
 --- 这个接口用来控制显示与否
-function RedPointNode:updateShow(showNum, redPointType)
+function RedPointNode:updateShow(redPointType, showNum)
     if self.showNum == showNum and self.redPointType == redPointType then
         --- 状态相同，不用显示刷新
         return
     end
 
     self.showNum = showNum
-    if (redPointType == RedPointConst.TYPE.NONE or showNum == 0) and self.redPointNode then
-        self.redPointNode:setVisible(false)
+    -- 如果当前显示类型的对应showValue为0，不显示红点
+    if (redPointType == self.redPointType and showNum == 0) then     -- 如果为0直接隐藏
+        if self.redPointNode then
+            self.redPointNode:setVisible(false)
+        end
         return
     end
 
     -- todo: ui刷新逻辑后期补全
     if showNum > 0 then
         if self.redPointType ~= redPointType then
-            --self.redPointNode:setSpriteFrame()
-            --- 显示类型不同，则需要刷新
             self.redPointType = redPointType
-            self:removeAllChildren()
-
-            if redPointType == RedPointConst.TYPE.NEW then
-                self.redPointNode = display.newSprite("redPoint/new.png")
-            elseif redPointType == RedPointConst.TYPE.NORMAL then
-                self.redPointNode = display.newSprite("redPoint/normal.png")
-            elseif redPointType == RedPointConst.TYPE.NUMBER then
-                self.redPointNode = display.newSprite("redPoint/number.png")
+            if not self.getUIFunc then
+                if self.customRedPointNode then
+                    self.customRedPointNode:removeFromParent()
+                    self.customRedPointNode = nil
+                end
+                if not self.redPointNode then       -- 创建红点底
+                    self.redPointNode = display.newSprite("#pubui_redPoint.png")
+                    self.redPointNode:addTo(self)
+                end
+                if redPointType == RedPointConst.TYPE.NEW then
+                    -- self.redPointNode = display.newSprite("redPoint/new.png")
+                elseif redPointType == RedPointConst.TYPE.NUMBER then
+                    if not self.numLabel then
+                        self.numLabel = display.newBMFontLabel({
+                            font = 'font/redPoint.fnt',
+                        }):addTo(self.redPointNode)
+                        self.numLabel:setAdditionalKerning(-10)
+                    end 
+                    self.numLabel:setString(tostring(showNum))
+                    local lblsize = self.numLabel:getContentSize()
+                    local redSize = self.redPointNode:getContentSize()
+                    self.numLabel:align(display.BOTTOM_CENTER, redSize.width / 2, (redSize.height - lblsize.height) / 2)
+                end
+                self.redPointNode:setVisible(true)
             else
-                --- 自定义红点走自己的逻辑
-                local path = self.getUIFunc()
-            end
-            if self.redPointNode then
-                self:addChild(self.redPointNode)
+                if self.redPointNode then
+                    self.redPointNode:setVisible(false)
+                end
+                -- 移除原来的自定义红点
+                if self.customRedPointNode then
+                    self.customRedPointNode:removeFromParent()
+                    self.customRedPointNode = nil
+                end
+
+                -- 如果是自定义红点，需要有getUIFunc
+                if redPointType == RedPointConst.TYPE.CUSTOM1 then
+                    local uiPath = self.getUIFunc()
+                    self.customRedPointNode = display.newSprite(uiPath)
+                    self.customRedPointNode:addTo(self)
+                end
+                self.customRedPointNode:setVisible(true)
             end
         end
     end
 end
 
-function RedPointNode:setRemove()
-    self.removeTag = true
+---如果有动画播放动画 todo
+function RedPointNode:playRedPointAnim(redPointType)
 end
-
-
 
 return RedPointNode

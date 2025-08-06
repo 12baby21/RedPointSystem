@@ -11,6 +11,8 @@ local RedPointStruct = class("RedPointStruct")
 ---@type RedPointConst
 local RedPointConst = require("redPoint.RedPointConst")
 
+-- todo
+-- 如果id为数字的话，需要加一份id映射表，用于查找
 
 
 function RedPointStruct:ctor(params)
@@ -20,7 +22,7 @@ function RedPointStruct:ctor(params)
     --- ctor方法可选参数
     --- 如果没有更新方法直接找孩子即可
     self.updateFuncMap = {}        -- key为红点类型，value为回调函数列表，红点条件采用的逻辑关系暂未确定
-    self.registeredType = {}        -- 注册过的红点类型，用于优先级判断
+    self.registeredType = {}        -- 注册过的红点类型，用于优先级判断(暂时有bug，放开)
                                     -- false = 0
     self.dirtyMap = {}      -- isDirty, showValue
     self.forceDirty = checkbool(params.forceDirty)     -- 是否强制为dirty，用于强制刷新，解决脏标冲突
@@ -41,25 +43,24 @@ function RedPointStruct:setUpdateFunc(funcMap)
         return
     end
     for _, v in pairs(funcMap) do
-        if not self.updateFuncMap[v.type] then
-            self.updateFuncMap[v.type] = {
-                isDirty = true,
-                funcList = {},
-            }
-            self.registeredType[v.type] = true
-        end
-        local funcList = self.updateFuncMap[v.type].funcList
-        funcList[#funcList + 1] = v.updateFunc
+        self.updateFuncMap[v.type] = v          -- list
+        self.registeredType[v.type] = true
+        self.dirtyMap[v.type] = {
+            isDirty = true,
+            showValue = 0,
+        }
     end
 end
 
 ---setDirty 设置脏标
---todo：redPointType改成event
-function RedPointStruct:setDirty(isDirty, redPointType)
+function RedPointStruct:setDirty(isDirty, redPointType, showValue)
     isDirty = self.forceDirty or isDirty
-    self.dirtyMap[redPointType].isDirty = isDirty
+    self.dirtyMap[redPointType] = {
+        isDirty = isDirty,
+        showValue = checkint(showValue),
+    }
     if isDirty and self.parent then
-        self.parent:setDirty(isDirty, redPointType)
+        self.parent:setDirty(isDirty, redPointType, showValue)
     end
 end
 
@@ -70,10 +71,7 @@ function RedPointStruct:addChild(child)
         return
     end
     local redId = child:getId()
-    self.children[redId] = {
-        node = child,
-        isDirty = false,            -- 默认为false，因为子红点刷新后会重置脏标
-    }
+    self.children[redId] = child
     self.childCnt = self.childCnt + 1
 end
 
@@ -105,7 +103,7 @@ end
 
 ---isShow 实际刷新红点数据，供UI使用
 ---@return number
-function RedPointStruct:isShow(showType, customData)
+function RedPointStruct:isShow(showType, event, customData)
     --- 没有脏标，直接返回当前保存的值
     if self.dirtyMap[showType] and not self.dirtyMap[showType].isDirty then
         return self.dirtyMap[showType].showValue
@@ -113,31 +111,39 @@ function RedPointStruct:isShow(showType, customData)
 
     --- 如果自身有刷新方法，优先判断自己的刷新方法
     local myUpdateFunc = self.updateFuncMap[showType]
-    local showValue = myUpdateFunc and myUpdateFunc(customData) or 0
-
-    for _, child in pairs(self.child) do
-        -- 如果有一个红点为true
-        showValue = showValue + child:isShow(showType)
-        --- 如果不是数字类红点
-        if showValue > 0 and self:_canEarlyBreak(showType) then
-            break
+    local showValue = 0
+    if myUpdateFunc and myUpdateFunc.funcList then
+        for _, func in ipairs(myUpdateFunc.funcList) do
+            showValue = showValue + func(event, customData)
+            if showValue > 0 and self:_canEarlyBreak(showType) then
+                self:setDirty(false, showValue)
+                return showValue
+            end
         end
     end
-    self:setDirty(false, showValue)
+    for _, child in pairs(self.children) do
+        --- 如果不是数字类红点
+        showValue = showValue + child:isShow(showType, event, customData)
+        if showValue > 0 and self:_canEarlyBreak(showType) then
+            self:setDirty(false, showValue)
+            return showValue
+        end
+    end
+    self:setDirty(false, showType, showValue)
     return showValue
 end
 
 ---getShowInfo 获取显示数据
 ---会根据红点优先级进行返回
 ---@return number, number 红点类型，红点显示状态
-function RedPointStruct:getShowInfo(customData)
-    for _, t in ipairs(RedPointConst.PRIORITY) do
-        if self.registeredType[t] then
-            local showNum = self:isShow(t, customData)
+function RedPointStruct:getShowInfo(event, customData)
+    for t, tStr in ipairs(RedPointConst.PRIORITY) do
+        -- if self.registeredType[t] then
+            local showNum = self:isShow(t, event, customData)
             if showNum > 0 then
                 return t, showNum
             end
-        end
+        -- end
     end
     return RedPointConst.TYPE.NONE, 0
 end
@@ -158,7 +164,6 @@ end
 function RedPointStruct:getChildrenRedCnt()
 
 end
-
 
 return RedPointStruct
 
