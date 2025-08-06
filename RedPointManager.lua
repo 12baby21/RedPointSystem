@@ -32,7 +32,9 @@ function RedPointManager:ctor()
     -- cc(self):addComponent("components.behavior.EventProtocol"):exportMethods()
     -- cc(self):addComponent("app.components.Notification"):exportMethods()
     self:init()
-    self.netEngine = app:netEngine()
+    self.eventManager = require("redPoint.RedPointEventManager"):getInstance()
+    -- cc(self):addComponent("components.behavior.EventProtocol"):exportMethods()
+    -- self.netEngine = app:netEngine()
 end
 
 function RedPointManager:init()
@@ -130,7 +132,7 @@ function RedPointManager:updateEventObserver(observer, events, redPointType)
     for _, event in ipairs(events or {}) do
         if not self.eventObserverMap[event] then
             self.eventObserverMap[event] = {}
-            self.netEngine:addEventListener(event, handler(self, self.onReceiveEvent))
+            self.eventManager:addEventListener(event, handler(self, self.onReceiveEvent))
         end
         local eventObserver = self.eventObserverMap[event]
         eventObserver[observer:getId()] = {
@@ -238,7 +240,7 @@ function RedPointManager:onReceiveEvent(event, ...)
     local eventObserver = self.eventObserverMap[eventName] or {}
     for _, observer in pairs(eventObserver) do
         local redPointStruct = observer.redPointStruct
-        local idString = redPointStruct:getIdString()
+        local idString = redPointStruct:getIdString()       -- todo
         -- 事件触发时，没有办法知道影响的红点类型，只能全部设置脏标，除非在红点构造时就知道事件对应哪个红点类型
         -- 但这确实也是一种可以的做法，不这么做就全部设置脏标
         redPointStruct:setDirty(true, observer.redPointType)
@@ -278,7 +280,14 @@ function RedPointManager:getIdStringById(id)
     return redPointStruct and redPointStruct:getIdString() or ""
 end
 
-------------------------------------------- TEST -------------------------------------------
+------------------------------------------- EVENT -------------------------------------------
+function RedPointManager:addEventListener(eventName, callback)
+    self.eventManager:addEventListener(eventName, callback)
+end
+
+function RedPointManager:dispatchEvent(params)
+    self.eventManager:dispatchEvent(params)
+end
 
 
 

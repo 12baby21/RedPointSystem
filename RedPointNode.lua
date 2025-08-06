@@ -18,7 +18,8 @@ local RedPointManager = app.redPointManager
 function RedPointNode:ctor(params)
     self.id = params.id
     self.idString = params.idString or RedPointManager:getIdStringById(self.id)
-    self.redPointType = RedPointConst.NONE
+    self.redPointType = RedPointConst.TYPE.NONE      -- 由子红点决定的类型
+    self.forceType = params.forceType or RedPointConst.TYPE.NONE           -- 无论子红点是何种类型，均由forceType决定
     self.showNum = 0
     self.getUIFunc = params.getUIFunc
     self.customData = params.customData
@@ -45,13 +46,22 @@ function RedPointNode:getCustomData()
     return self.customData
 end
 
-function RedPointNode:setBindKey(bindKey)
-    self.bindKey = bindKey
-end
-
-
 --- 这个接口用来控制显示与否
+--- todo： 需要修改，红点的显示类型应该由两种情况决定：1.子红点 2.强制为某种红点
 function RedPointNode:updateShow(redPointType, showNum)
+    if self.forceType ~= RedPointConst.TYPE.NONE then
+        redPointType = self.forceType       -- 如果有强制显示类型，则重置为强制显示类型
+    end
+
+    if redPointType == RedPointConst.TYPE.NONE then     -- 没有红点显示类型
+        if self.redPointNode then
+            self.redPointNode:setVisible(false)
+        end
+        if self.customRedPointNode then
+            self.customRedPointNode:setVisible(false)
+        end
+    end
+
     if self.showNum == showNum and self.redPointType == redPointType then
         --- 状态相同，不用显示刷新
         return
@@ -112,9 +122,13 @@ function RedPointNode:updateShow(redPointType, showNum)
                 end
                 self.customRedPointNode:setVisible(true)
             end
+        elseif redPointType == RedPointConst.TYPE.NUMBER then       -- 数字红点只要数字变化了就要刷新
+            self.numLabel:setString(tostring(showNum))
         end
     end
 end
+
+
 
 ---如果有动画播放动画 todo
 function RedPointNode:playRedPointAnim(redPointType)
