@@ -84,6 +84,7 @@ function RedPointManager:tryRegisterToParent(params)
         local tree = RedPointTree.new({
             idString = idString,
             funcMap = params.funcMap,
+            forceDirty = true,
         })
         self.redPointForest[tree.root.id] = tree
         local redPointStruct = tree:getRedPointStructById(params.id)
@@ -135,10 +136,14 @@ function RedPointManager:updateEventObserver(observer, events, redPointType)
             self.eventManager:addEventListener(event, handler(self, self.onReceiveEvent))
         end
         local eventObserver = self.eventObserverMap[event]
-        eventObserver[observer:getId()] = {
-            redPointStruct = observer,
-            redPointType = redPointType,
-        }
+        local observerId = observer:getId()
+        if not eventObserver[observerId] then
+            eventObserver[observerId] = {
+                redPointStruct = observer,
+                redPointTypes = {},
+            }
+        end
+        table.insert(eventObserver[observerId].redPointTypes, redPointType)
     end
 end
 
@@ -241,22 +246,35 @@ function RedPointManager:onReceiveEvent(event, ...)
     for _, observer in pairs(eventObserver) do
         local redPointStruct = observer.redPointStruct
         local idString = redPointStruct:getIdString()       -- todo
-        -- 事件触发时，没有办法知道影响的红点类型，只能全部设置脏标，除非在红点构造时就知道事件对应哪个红点类型
-        -- 但这确实也是一种可以的做法，不这么做就全部设置脏标
-        redPointStruct:setDirty(true, observer.redPointType)
-        self:updateShow(redPointStruct)
+        for _, redPointType in ipairs(observer.redPointTypes) do
+            redPointStruct:setDirty(true, redPointType)
+        end
+        self:updateShow(event, redPointStruct)
     end
 end
 
 --- 刷新UI显示，通过唯一id找相关的UI
-function RedPointManager:updateShow(redPointStruct)
-    while redPointStruct do
+function RedPointManager:updateShow(event, redPointStruct)
+    while redPointStruct do     -- while循环用来向父红点更新
         local id = redPointStruct.id
         local observerUiList = self.redPointNodeMap[id] or {}
         for _, observerUI in ipairs(observerUiList) do
-            local customData = observerUI:getCustomData()
-            local showType, showNum = redPointStruct:getShowInfo(customData)
-            observerUI:updateShow(showType, showNum)
+            -- TODO: 这里可能有一个优化点，可以想一个办法来判断当前ui的customData是否和时间中的customData相等，可以衡量一下
+            if observerUI:checkRequireRefresh(event and event.data or {}) then 
+                local customData = observerUI:getCustomData()
+                local showType, showNum = redPointStruct:getShowInfo(event, customData)        -- 获取逻辑红点类型和value
+                -- 有强制显示类型，判断是否满足
+                local checkMap = observerUI:getCheckMap()
+                if checkMap then
+                    for forceShowType, logicTypes in pairs(checkMap) do
+                        if table.indexof(logicTypes, showType) then     -- 逻辑红点多对一则用强制显示类型覆盖逻辑显示类型
+                            showType = forceShowType        -- 显示优先级在逻辑红点中定义了
+                            break
+                        end
+                    end
+                end
+                observerUI:updateShow(showType, showNum)
+            end
         end
         redPointStruct = redPointStruct.parent
     end

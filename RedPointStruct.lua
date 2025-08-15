@@ -140,7 +140,7 @@ function RedPointStruct:getShowInfo(event, customData)
     for t, tStr in ipairs(RedPointConst.PRIORITY) do
         -- if self.registeredType[t] then
             local showNum = self:isShow(t, event, customData)
-            if showNum > 0 then
+            if showNum ~= 0 then
                 return t, showNum
             end
         -- end

@@ -26,6 +26,7 @@ function RedPointTree:tryRegisterToParent(params)
         parentStruct = RedPointStruct.new({
             id = parentId,
             idString = tostring(parentId),
+            forceDirty = params.forceDirty,
         })
         isRootChanged = true
         self.root = parentStruct
@@ -36,6 +37,7 @@ function RedPointTree:tryRegisterToParent(params)
         redPointStruct = RedPointStruct.new({
             id = id,
             idString = (parentStruct and parentStruct.idString or "") .. "|" .. id,
+            forceDirty = params.forceDirty,
         })
         if not self.root then
             isRootChanged = true

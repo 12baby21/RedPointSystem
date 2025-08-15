@@ -18,11 +18,14 @@ local RedPointManager = app.redPointManager
 function RedPointNode:ctor(params)
     self.id = params.id
     self.idString = params.idString or RedPointManager:getIdStringById(self.id)
-    self.redPointType = RedPointConst.TYPE.NONE      -- 由子红点决定的类型
-    self.forceType = params.forceType or RedPointConst.TYPE.NONE           -- 无论子红点是何种类型，均由forceType决定
+    self.redPointType = RedPointConst.TYPE.NONE      -- 由关联的逻辑红点决定
+    -- {showType -> {logicType}}
+    self.checkMap = params.checkMap         -- 用于一个显示类型可以对应多个显示逻辑，有一个红点满足条件则显示
+
     self.showNum = 0
     self.getUIFunc = params.getUIFunc
     self.customData = params.customData
+    self.checkRefreshFunc = params.checkRefreshFunc     -- 用来判断是否是同一个红点
     self:setNodeEventEnabled(true)
 
     -- view
@@ -46,13 +49,13 @@ function RedPointNode:getCustomData()
     return self.customData
 end
 
+function RedPointNode:getCheckMap()
+    return self.checkMap
+end
+
 --- 这个接口用来控制显示与否
 --- todo： 需要修改，红点的显示类型应该由两种情况决定：1.子红点 2.强制为某种红点
 function RedPointNode:updateShow(redPointType, showNum)
-    if self.forceType ~= RedPointConst.TYPE.NONE then
-        redPointType = self.forceType       -- 如果有强制显示类型，则重置为强制显示类型
-    end
-
     if redPointType == RedPointConst.TYPE.NONE then     -- 没有红点显示类型
         if self.redPointNode then
             self.redPointNode:setVisible(false)
@@ -90,7 +93,16 @@ function RedPointNode:updateShow(redPointType, showNum)
                     self.redPointNode:addTo(self)
                 end
                 if redPointType == RedPointConst.TYPE.NEW then
-                    -- self.redPointNode = display.newSprite("redPoint/new.png")
+                    if not self.numLabel then
+                        self.numLabel = display.newBMFontLabel({
+                            font = 'font/redPoint.fnt',
+                        }):addTo(self.redPointNode)
+                        self.numLabel:setAdditionalKerning(-10)
+                    end 
+                    self.numLabel:setString('新')
+                    local lblsize = self.numLabel:getContentSize()
+                    local redSize = self.redPointNode:getContentSize()
+                    self.numLabel:align(display.BOTTOM_CENTER, redSize.width / 2, (redSize.height - lblsize.height) / 2)
                 elseif redPointType == RedPointConst.TYPE.NUMBER then
                     if not self.numLabel then
                         self.numLabel = display.newBMFontLabel({
@@ -126,6 +138,15 @@ function RedPointNode:updateShow(redPointType, showNum)
             self.numLabel:setString(tostring(showNum))
         end
     end
+end
+
+-- 判断是否需要更新当前红点的显示，用来避免重复计算(通过customData来判断)
+-- 主要用来解决同一个逻辑红点对应多个ui节点的情况
+function RedPointNode:checkRequireRefresh(eventData)
+    if self.checkRefreshFunc then
+        return self.checkRefreshFunc(eventData, self.customData)
+    end
+    return true
 end
 
 
